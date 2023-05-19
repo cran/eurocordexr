@@ -14,13 +14,17 @@
 #' \item for multiple downscale realizations (v1, v2, ..)
 #' \item for complete periods of simulations: historical usually goes approx.
 #' from 1950/70 - 2005, and rcp* from 2006 - 2100; evaluation is not checked,
-#' because it has very heterogeneous periods
-#' \item that all variables (tas, pr, ...) are available for all models
+#' because it has very heterogeneous periods; cordex-adjust has historical and
+#' rcp* combined
+#' \item that each rcp* has a corresponding historical run (optional, off by
+#' default; otherwise problematic with merged hist and rcp runs, as in cordex-adjust)
+#' \item that all variables (tas, pr, ...) are available for all models (optional, off by default)
 #' }
 #'
 #'
 #' @param data_inventory A data.table as resulting from
 #'   \code{\link{get_inventory}}.
+#' @param check_hist Boolean, if \code{TRUE}, tests that each rcp* has a corresponding historical run.
 #' @param check_vars Boolean, if \code{TRUE}, runs \code{\link{compare_variables_in_inventory}}
 #'  to check if all variables are available in all models.
 #'
@@ -42,6 +46,7 @@
 #' inv_check
 #' }
 check_inventory <- function(data_inventory,
+                            check_hist = FALSE,
                             check_vars = FALSE){
 
   dat_inv <- copy(data_inventory)
@@ -76,7 +81,7 @@ check_inventory <- function(data_inventory,
 
 
   # check for multiple downscale_realisation
-  dat_mult_ds <- dat_inv[,
+  dat_mult_ds <- dat_inv[!grepl("Adjust", variable),
                          .(N = .N,
                            downscale_realisations = paste(downscale_realisation, collaps = ", ")),
                          .(variable, domain, gcm, institute_rcm, experiment,
@@ -94,13 +99,31 @@ check_inventory <- function(data_inventory,
                   total_simulation_years >= 54) &
               !(year(date_start) %in% c(1970) &
                   total_simulation_years >= 36)],
-    dat_inv[startsWith(experiment, "rcp") & !is.na(date_start) &
+    dat_inv[!grepl("Adjust", variable) & startsWith(experiment, "rcp") & !is.na(date_start) &
               !(year(date_start) %in% c(2005, 2006) &
-                  total_simulation_years >= 93)]
+                  total_simulation_years >= 93) &
+              !(year(date_start) %in% 1948:1951 &
+                  total_simulation_years >= 147) &
+              !(year(date_start) %in% c(1970, 1971) &
+                  total_simulation_years >= 128)],
+    dat_inv[grepl("Adjust", variable) & !is.na(date_start) &
+              !(year(date_start) %in% 1948:1951 &
+                  total_simulation_years >= 147) &
+              !(year(date_start) %in% c(1970, 1971) &
+                  total_simulation_years >= 128)]
   )
 
   l_out$incomplete_periods <- dat_period_complete
 
+
+  # check that each rcp has a historical
+  if(check_hist){
+    dat_hist <- dat_inv[!grepl("Adjust", variable) & timefreq != "fx" & experiment == "historical",
+                        .(variable, domain, gcm, institute_rcm, ensemble, downscale_realisation, timefreq)]
+    l_out$missing_historical <- dat_inv[
+      !grepl("Adjust", variable) & timefreq != "fx" & experiment != "historical"
+    ][!dat_hist, on = names(dat_hist)]
+  }
 
   # check for complete combinations for all variables
   if(check_vars){
@@ -128,9 +151,7 @@ print.eurocordexr_inv_check <- function(x, ...){
 
 
   # check for multiple timefreq
-  test_timefreq <- length(x$timefreqs) > 1
-
-  if(test_timefreq) {
+  if(length(x$timefreqs) > 1) {
     cat("Multiple time frequencies detected:", x$timefreqs, "\n")
   } else {
     cat("No multiple time frequencies.", "\n")
@@ -141,8 +162,7 @@ print.eurocordexr_inv_check <- function(x, ...){
 
 
   # check for multiple domains
-  test_domain <- length(x$domains) > 1
-  if(test_domain) {
+  if(length(x$domains) > 1) {
     cat("Multiple domains detected:", x$domains, "\n")
   } else {
     cat("No multiple domains.", "\n")
@@ -155,9 +175,7 @@ print.eurocordexr_inv_check <- function(x, ...){
 
   # check for multiple ensembles
   n_mult_ens <- nrow(x$multiple_ensembles)
-  test_mult_ens <- n_mult_ens > 0
-
-  if(test_mult_ens){
+  if(n_mult_ens > 0){
     cat("Multiple ensembles in", n_mult_ens, "cases:", "\n")
     print(x$multiple_ensembles)
   } else {
@@ -171,8 +189,7 @@ print.eurocordexr_inv_check <- function(x, ...){
 
   # check for multiple downscale_realisation
   n_mult_ds <- nrow(x$multiple_downscale_realisations)
-  test_mult_ds <- n_mult_ds > 0
-  if(test_mult_ds){
+  if(n_mult_ds > 0){
     cat("Multiple downscale realisation in", n_mult_ds, "cases:", "\n")
     print(x$multiple_downscale_realisations)
   } else {
@@ -184,20 +201,28 @@ print.eurocordexr_inv_check <- function(x, ...){
 
   if(nrow(x$incomplete_periods) == 0){
     cat("All historical and rcp simulations have complete periods.\n")
-    test_complete_period <- FALSE
   } else {
     cat("Following model runs do not have complete periods:", "\n")
     print(x$incomplete_periods)
-    test_complete_period <- TRUE
   }
   cat("------------------------------------------------------\n")
   cat("------------------------------------------------------\n")
 
 
+  # check that each rcp has a historical
+  if(!is.null(x$missing_historical)){
+    if(nrow(x$missing_historical) == 0){
+      cat("All rcp simulations have a corresponding historical run.\n")
+    } else {
+      cat("Following scenario model runs do not have a corresponding historical run:", "\n")
+      print(x$missing_historical)
+    }
+    cat("------------------------------------------------------\n")
+    cat("------------------------------------------------------\n")
+  }
 
   if(!is.null(x$incomplete_variables)){
-    test_variable <- nrow(x$incomplete_variables) > 0
-    if(test_variable){
+    if(nrow(x$incomplete_variables) > 0){
       cat("Following models do not have all variables:", "\n")
       print(x$incomplete_variables)
     } else {
