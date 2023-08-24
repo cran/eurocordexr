@@ -1,3 +1,13 @@
+# eurocordexr 0.2.4
+
+- added internal data vectors with short names for GCMs and RCMs
+- removed depends, only namespace imports
+- added tests
+- added some test data to run examples in `get_inventory()` and `check_inventory()`
+- added function `get_inventory_cmip5()` to get CMIP5 gcm info
+
+---
+
 # eurocordexr 0.2.3
 
 - updated `check_inventory()` to work with CORDEX-Adjust data, too. Check for full period also works if historical is merged to the RCP in filenames.

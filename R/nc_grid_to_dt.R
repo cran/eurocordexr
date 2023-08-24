@@ -53,17 +53,11 @@
 #'
 #' @import data.table
 #' @importFrom magrittr %>%
-#' @import PCICt
-#' @import ncdf4
-#' @import ncdf4.helpers
 #'
 #' @examples
 #' # example data from EURO-CORDEX (cropped for size)
 #' fn1 <- system.file("extdata", "test1.nc", package = "eurocordexr")
-#' dat <- nc_grid_to_dt(
-#'   filename = fn1,
-#'   variable = "tasmin"
-#' )
+#' dat <- nc_grid_to_dt(fn1)
 #' str(dat)
 nc_grid_to_dt <- function(filename,
                           variable,
@@ -73,8 +67,11 @@ nc_grid_to_dt <- function(filename,
                           date_range,
                           verbose = FALSE){
 
-  ncobj <- nc_open(filename,
-                   readunlim = FALSE)
+  # NSE in R CMD check
+  icell <- x <- y <- value <- NULL
+
+  ncobj <- ncdf4::nc_open(filename,
+                          readunlim = FALSE)
 
   if(verbose) cat("Succesfully opened file:", filename, "\n")
 
@@ -83,13 +80,13 @@ nc_grid_to_dt <- function(filename,
     if(verbose) cat("No variable supplied. Took first one:", variable, "\n")
   }
 
-  dimnames <- nc.get.dim.names(ncobj, variable)
+  dimnames <- ncdf4.helpers::nc.get.dim.names(ncobj, variable)
 
-  dim_x <- ncvar_get(ncobj, dimnames[1])
-  dim_y <- ncvar_get(ncobj, dimnames[2])
+  dim_x <- ncdf4::ncvar_get(ncobj, dimnames[1])
+  dim_y <- ncdf4::ncvar_get(ncobj, dimnames[2])
 
 
-  times <- nc.get.time.series(ncobj, variable)
+  times <- ncdf4.helpers::nc.get.time.series(ncobj, variable)
 
   if(all(is.na(times))){
 
@@ -105,7 +102,7 @@ nc_grid_to_dt <- function(filename,
   } else if(startsWith(ncobj$dim$time$units, "months since")){
     # ncdf4.helpers workaround for "months since" time information
     origin <- lubridate::as_date(sub("months since ", "", ncobj$dim$time$units))
-    dates <- origin + months(floor(ncvar_get(ncobj, "time")))
+    dates <- origin + months(floor(ncdf4::ncvar_get(ncobj, "time")))
     times <- dates
 
   } else {
@@ -124,7 +121,7 @@ nc_grid_to_dt <- function(filename,
 
   if(missing(date_range)){
     ndates <- length(dates)
-    arr_var <- ncvar_get(ncobj, variable)
+    arr_var <- ncdf4::ncvar_get(ncobj, variable)
 
   } else {
     stopifnot(date_range[1] <= date_range[2])
@@ -134,7 +131,7 @@ nc_grid_to_dt <- function(filename,
     i_date_start <- min(which(dates >= date_range[1]))
     i_date_end <- max(which(dates <= date_range[2]))
     ndates <- i_date_end - i_date_start + 1
-    arr_var <- ncvar_get(ncobj, variable, start = c(1,1,i_date_start), count = c(-1,-1, ndates))
+    arr_var <- ncdf4::ncvar_get(ncobj, variable, start = c(1,1,i_date_start), count = c(-1,-1, ndates))
 
     dates <- dates[i_date_start : i_date_end]
     times <- times[i_date_start : i_date_end]
@@ -170,7 +167,7 @@ nc_grid_to_dt <- function(filename,
     dtx <- map_non_standard_calendar(times)
 
     dat <- dat[,
-                .(date = dtx$dates_full, value = value[dtx$idx_pcict]),
+                list(date = dtx$dates_full, value = value[dtx$idx_pcict]),
                 by = bycols]
 
   }
@@ -178,7 +175,7 @@ nc_grid_to_dt <- function(filename,
 
   setnames(dat, "value", variable)
 
-  nc_close(ncobj)
+  ncdf4::nc_close(ncobj)
   return(dat)
 }
 

@@ -11,26 +11,33 @@
 #'
 #' @return A data.table with the inventory information.
 #'
-#' @seealso \code{\link{compare_variables_in_inventory}} for further comparing
-#'   the results, and \code{\link{check_inventory}} for performing some checks.
+#' @seealso \code{\link{check_inventory}} for performing some checks.
 #'
 #' @export
 #'
 #' @import data.table
-#' @importFrom magrittr %>% equals
-#' @importFrom lubridate ymd day day<-
+#' @importFrom magrittr %>%
 #'
 #'
 #' @examples
-#' \dontrun{
+#' # some empty example files
+#' fn_zip <- system.file("extdata", "inv-test-files.zip", package = "eurocordexr")
+#' tmpdir <- tempdir()
+#' unzip(fn_zip, exdir = tmpdir)
 #'
-#' path <- "/mnt/CEPH_BASEDATA/METEO/SCENARIO"
-#' dat <- get_inventory(path)
-#' print(dat)
+#' dat_inv <- get_inventory(fs::path(tmpdir, "testdata", "mixed-vars"))
+#' print(dat_inv)
 #'
-#' }
+#'
 get_inventory <- function(path,
                           add_files = TRUE){
+
+  # NSE in R CMD check
+  list_files <- timefreq <- downscale_realisation <- experiment <- NULL
+  institute_rcm <- gcm <- domain <- variable <- ensemble <- fn <- NULL
+  V9 <- file_fullpath <- NULL
+  period <- date_start <- date_end <- NULL
+
 
   all_files_fullpath <- fs::dir_ls(path,
                                    regexp = "[.]nc$",
@@ -60,8 +67,8 @@ get_inventory <- function(path,
 
   # prep dates
   dat_info[, c("date_start", "date_end") := tstrsplit(period, "-")]
-  dat_info[, date_start := ymd(date_start)]
-  dat_info[, date_end := ymd(date_end)]
+  dat_info[, date_start := lubridate::ymd(date_start)]
+  dat_info[, date_end := lubridate::ymd(date_end)]
 
   # helper fun to check for complete contiguous period
   f_date_complete <- function(date_start, date_end){
@@ -69,15 +76,15 @@ get_inventory <- function(path,
     if(all(is.na(date_start))) return(NA)
 
     # 360 calendar adjustment
-    lgl_check <- month(date_end) == 12 & day(date_end) == 30
-    day(date_end[lgl_check]) <- 31
+    lgl_check <- lubridate::month(date_end) == 12 & lubridate::day(date_end) == 30
+    lubridate::`day<-`(date_end[lgl_check], 31)
 
     mapply(seq, date_start, date_end, by = "day") %>%
       unlist %>%
       sort %>%
       unique %>%
       diff %>%
-      equals(1) %>%
+      magrittr::equals(1) %>%
       all
 
   }
@@ -86,7 +93,7 @@ get_inventory <- function(path,
 
     if(all(is.na(date_start))) return(NA_integer_)
 
-    mapply(seq, year(date_start), year(date_end), SIMPLIFY = FALSE) %>%
+    mapply(seq, lubridate::year(date_start), lubridate::year(date_end), SIMPLIFY = FALSE) %>%
       unlist %>%
       unique %>%
       length
@@ -96,14 +103,14 @@ get_inventory <- function(path,
 
   # get unique models
   dat_info_summary <- dat_info[,
-                               .(nn_files = .N,
-                                 date_start = min(date_start),
-                                 date_end = max(date_end),
-                                 total_simulation_years = f_sim_years(date_start, date_end),
-                                 period_contiguous = f_date_complete(date_start, date_end),
-                                 list_files = list(file_fullpath)),
-                               keyby = .(variable, domain, gcm, institute_rcm, experiment,
-                                         ensemble, downscale_realisation, timefreq)]
+                               list(nn_files = .N,
+                                    date_start = min(date_start),
+                                    date_end = max(date_end),
+                                    total_simulation_years = f_sim_years(date_start, date_end),
+                                    period_contiguous = f_date_complete(date_start, date_end),
+                                    list_files = list(file_fullpath)),
+                               keyby = list(variable, domain, gcm, institute_rcm, experiment,
+                                            ensemble, downscale_realisation, timefreq)]
 
   # remove files if not requested
   if(!add_files) dat_info_summary[, list_files := NULL]
@@ -113,61 +120,3 @@ get_inventory <- function(path,
 
   return(dat_info_summary)
 }
-#' Print an inventory
-#'
-#' Modified
-#'   \code{\link[data.table:print.data.table]{data.table::print.data.table}} to
-#'   print an inventory from \code{\link{get_inventory}} more nicely by
-#'   removing some columns.
-#'
-#' @param x data.table to print
-#' @param all_cols Boolean (default \code{FALSE}), if \code{TRUE}, will print all
-#'   columns available
-#' @param ... passed on to \code{\link[data.table:print.data.table]{data.table::print.data.table}}
-#'
-#' @return x invisibly, used for side effects: prints to console
-#'
-#' @seealso \code{\link{print.default}}
-#' @export
-print.eurocordexr_inv <- function(x, all_cols = F, ...){
-
-  # remove "eurocordexr_inv" class, so print falls back to data.table default (internal)
-  setattr(x, "class", c("data.table", "data.frame"))
-
-  cols_optional <- c("nn_files",
-                     "total_simulation_years",
-                     "period_contiguous",
-                     "list_files")
-  class_abbs <- c("<int>", "<int>", "<lgcl>", "<list>")
-
-  # print less columns
-  if(!all_cols){
-
-    avail <- cols_optional %in% colnames(x)
-    cols_not_print <- cols_optional[avail]
-    n <- length(cols_not_print)
-    print(x[, -..cols_not_print],
-          class = TRUE, trunc.cols = FALSE,
-          ...)
-    # borrowed from data.table:::print.data.table()
-    if(n > 0L){
-      cat(sprintf(ngettext(n,
-                           "%d variable not shown: %s\n",
-                           "%d variables not shown: %s\n"),
-                  n,
-                  paste(cols_not_print, class_abbs[avail], collapse = ", ")))
-    }
-
-
-  } else {
-    print(x,
-          class = TRUE, trunc.cols = FALSE,
-          ...)
-  }
-
-  # add back "eurocordexr_inv" class, since modified by refernce
-  setattr(x, "class", c("eurocordexr_inv", "data.table", "data.frame"))
-
-  invisible(x)
-}
-

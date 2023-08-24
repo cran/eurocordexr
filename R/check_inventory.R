@@ -38,16 +38,26 @@
 #' @importFrom magrittr %>%
 #'
 #' @examples
-#' \dontrun{
+#' # some empty example files
+#' fn_zip <- system.file("extdata", "inv-test-files.zip", package = "eurocordexr")
+#' tmpdir <- tempdir()
+#' unzip(fn_zip, exdir = tmpdir)
 #'
-#' path <- "/mnt/CEPH_PROJECTS/SCENARIO/CLIMATEDATA/"
-#' dat_inv <- get_inventory(path)
-#' inv_check <- check_inventory(dat_inv)
-#' inv_check
-#' }
+#' dat_inv <- get_inventory(fs::path(tmpdir, "testdata"))
+#' check_inventory(dat_inv)
+#'
 check_inventory <- function(data_inventory,
                             check_hist = FALSE,
                             check_vars = FALSE){
+
+  if(inherits(data_inventory, "cmip5")) stop("Supplied a CMIP5 inventory, please use check_inventory_cmip5() instead.")
+
+  # NSE in R CMD check
+  list_files <- ensembles <- N <-  NULL
+  variable <- domain <- gcm <- institute_rcm <- experiment <- ensemble <- NULL
+  downscale_realisation <- timefreq <- date_start <- NULL
+  all_years_equal <- all_date_start_equal <- total_simulation_years <- NULL
+
 
   dat_inv <- copy(data_inventory)
 
@@ -71,10 +81,10 @@ check_inventory <- function(data_inventory,
 
   # check for multiple ensembles
   dat_mult_ens <- dat_inv[,
-                          .(N = .N,
-                            ensembles = paste(ensemble, collapse = ", ")),
-                          .(variable, domain, gcm, institute_rcm, experiment,
-                            downscale_realisation, timefreq)]
+                          list(N = .N,
+                               ensembles = paste(ensemble, collapse = ", ")),
+                          list(variable, domain, gcm, institute_rcm, experiment,
+                               downscale_realisation, timefreq)]
   dat_mult_ens <- dat_mult_ens[N > 1]
 
   l_out$multiple_ensembles <- dat_mult_ens
@@ -82,10 +92,10 @@ check_inventory <- function(data_inventory,
 
   # check for multiple downscale_realisation
   dat_mult_ds <- dat_inv[!grepl("Adjust", variable),
-                         .(N = .N,
-                           downscale_realisations = paste(downscale_realisation, collaps = ", ")),
-                         .(variable, domain, gcm, institute_rcm, experiment,
-                           ensemble, timefreq)]
+                         list(N = .N,
+                              downscale_realisations = paste(downscale_realisation, collapse = ", ")),
+                         list(variable, domain, gcm, institute_rcm, experiment,
+                              ensemble, timefreq)]
   dat_mult_ds <- dat_mult_ds[N > 1]
 
 
@@ -119,7 +129,7 @@ check_inventory <- function(data_inventory,
   # check that each rcp has a historical
   if(check_hist){
     dat_hist <- dat_inv[!grepl("Adjust", variable) & timefreq != "fx" & experiment == "historical",
-                        .(variable, domain, gcm, institute_rcm, ensemble, downscale_realisation, timefreq)]
+                        list(variable, domain, gcm, institute_rcm, ensemble, downscale_realisation, timefreq)]
     l_out$missing_historical <- dat_inv[
       !grepl("Adjust", variable) & timefreq != "fx" & experiment != "historical"
     ][!dat_hist, on = names(dat_hist)]

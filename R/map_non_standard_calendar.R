@@ -21,17 +21,15 @@
 #'
 #' @import data.table
 #' @importFrom magrittr %>%
-#' @import PCICt
-#' @importFrom lubridate ymd day day<-
 #'
 #' @examples
 #' # example data from EURO-CORDEX (cropped for size)
 #' # non-standard calendar (360)
 #' fn2 <- system.file("extdata", "test2.nc", package = "eurocordexr")
-#' ncobj <- nc_open(fn2)
+#' ncobj <- ncdf4::nc_open(fn2)
 #'
 #' # read as PCICt-class
-#' times <- nc.get.time.series(ncobj, "tasmin")
+#' times <- ncdf4.helpers::nc.get.time.series(ncobj, "tasmin")
 #' str(times)
 #'
 #' dtx <- map_non_standard_calendar(times)
@@ -45,16 +43,16 @@ map_non_standard_calendar <- function(times){
   dates_pcict %>%
     min %>%
     as.character %>%
-    ymd() -> date_min
+    lubridate::ymd() -> date_min
 
   dates_pcict %>%
     max %>%
     as.character %>%
-    ymd() -> date_max
+    lubridate::ymd() -> date_max
 
   # if last day of year is Dec 30, make it Dec 31
-  if(month(date_max) == 12 & day(date_max) == 30){
-    day(date_max) <- 31
+  if(lubridate::month(date_max) == 12 & lubridate::day(date_max) == 30){
+    lubridate::`day<-`(date_max, 31)
   }
 
   dates_full <- seq(date_min, date_max, by = "day")
