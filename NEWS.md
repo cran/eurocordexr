@@ -1,3 +1,10 @@
+# eurocordexr 0.2.5
+
+- added `nc_grid_to_dt_raw()`, which gives a more basic access to the netcdf file using the RNetCDF library
+- added pkgdown website and some usage articles
+
+---
+
 # eurocordexr 0.2.4
 
 - added internal data vectors with short names for GCMs and RCMs
